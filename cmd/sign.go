@@ -185,6 +185,9 @@ func init() {
 	signCmd.MarkFlagRequired("secret")
 }
 
+// parseDuration converts a human-friendly duration string to time.Duration.
+// Supported formats: "7d" (days), "2h" (hours), "30m"/"30min" (minutes), "60s"/"60sec" (seconds).
+// Returns an error if the format is invalid or the unit is not recognized.
 func parseDuration(s string) (time.Duration, error) {
 	var num int
 	var unit string
@@ -208,6 +211,11 @@ func parseDuration(s string) (time.Duration, error) {
 	return dur, nil
 }
 
+// parseTime converts a time string to Unix timestamp (seconds since epoch).
+// Supports two formats:
+// - Unix timestamp: "1609459200"
+// - ISO 8601 / RFC 3339: "2024-01-01T00:00:00Z" or "2024-01-01T00:00:00+02:00"
+// Returns the Unix timestamp or an error if the format is not recognized.
 func parseTime(s string) (int64, error) {
 	// try Unix timestamp
 	if unix, err := strconv.ParseInt(s, 10, 64); err == nil {
@@ -221,6 +229,9 @@ func parseTime(s string) (int64, error) {
 	return t.Unix(), nil
 }
 
+// generateJTI generates a UUID-style JWT ID (jti) claim value.
+// Returns a string in the format: "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" where x is a hex digit.
+// Uses crypto/rand for cryptographically secure random number generation.
 func generateJTI() string {
 	b := make([]byte, 16)
 	rand.Read(b)
