@@ -1,0 +1,140 @@
+version: 2
+
+before:
+  hooks:
+    - go mod tidy
+    - go test ./...
+
+builds:
+  - id: jwt
+    main: .
+    binary: jwt
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+      - arm
+    goarm:
+      - "7"
+    ignore:
+      - goos: windows
+        goarch: arm
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+
+archives:
+  - id: jwt
+    format: tar.gz
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- .Version }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end }}
+    format_overrides:
+      - goos: windows
+        format: zip
+    files:
+      - README.md
+      - LICENSE
+      - CHANGELOG.md
+
+checksum:
+  name_template: 'checksums.txt'
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^ci:'
+      - '^chore:'
+      - Merge pull request
+      - Merge branch
+  groups:
+    - title: Features
+      regexp: '^.*?feat(\([[:word:]]+\))??!?:.+$'
+      order: 0
+    - title: 'Bug fixes'
+      regexp: '^.*?fix(\([[:word:]]+\))??!?:.+$'
+      order: 1
+    - title: 'Performance improvements'
+      regexp: '^.*?perf(\([[:word:]]+\))??!?:.+$'
+      order: 2
+    - title: Others
+      order: 999
+
+release:
+  github:
+    owner: lazhari
+    name: jwt
+  draft: false
+  prerelease: auto
+  mode: replace
+  header: |
+    ## JWT CLI {{ .Tag }} ({{ .Date }})
+
+    Welcome to this new release of JWT CLI!
+  footer: |
+    ## Installation
+
+    ### Using Go
+    ```bash
+    go install github.com/lazhari/jwt@{{ .Tag }}
+    ```
+
+    ### Using Binary
+    Download the appropriate binary for your platform from the assets below.
+
+    ### Using Homebrew (macOS/Linux)
+    ```bash
+    brew install lazhari/tap/jwt
+    ```
+
+    ---
+
+    **Full Changelog**: https://github.com/lazhari/jwt/compare/{{ .PreviousTag }}...{{ .Tag }}
+
+brews:
+  - repository:
+      owner: lazhari
+      name: homebrew-tap
+    folder: Formula
+    homepage: https://github.com/lazhari/jwt
+    description: A simple CLI tool for creating and decoding JWT tokens
+    license: MIT
+    test: |
+      system "#{bin}/jwt --help"
+    install: |
+      bin.install "jwt"
+
+nfpms:
+  - id: jwt
+    package_name: jwt
+    vendor: Lazhari
+    homepage: https://github.com/lazhari/jwt
+    maintainer: Lazhari <https://github.com/lazhari>
+    description: A simple CLI tool for creating and decoding JWT tokens
+    license: MIT
+    formats:
+      - deb
+      - rpm
+      - apk
+    bindir: /usr/bin
