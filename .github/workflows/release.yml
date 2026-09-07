@@ -8,6 +8,12 @@ on:
 permissions:
   contents: write
 
+# One release run per tag at a time; a second push of the same tag waits
+# instead of racing the first run on asset uploads.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   goreleaser:
     name: GoReleaser

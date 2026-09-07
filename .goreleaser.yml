@@ -88,6 +88,9 @@ release:
   draft: false
   prerelease: auto
   mode: replace
+  # Re-running the workflow for the same tag must not fail on assets that a
+  # previous (or concurrent) run already uploaded.
+  replace_existing_artifacts: true
   header: |
     ## JWT CLI {{ .Tag }} ({{ .Date }})
 
