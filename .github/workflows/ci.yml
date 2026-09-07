@@ -32,6 +32,9 @@ jobs:
       run: go mod verify
 
     - name: Run tests
+      # bash on every OS: PowerShell splits -coverprofile=coverage.txt into
+      # two arguments and go test then looks for a package named ".txt".
+      shell: bash
       run: go test -v -race -coverprofile=coverage.txt -covermode=atomic ./...
 
     - name: Upload coverage to Codecov
