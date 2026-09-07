@@ -37,7 +37,7 @@ install:
 # Run tests
 test:
 	@echo "Running tests..."
-	@go test ./...
+	@go test -race ./...
 
 # Run tests with verbose output
 test-verbose:
@@ -49,7 +49,7 @@ test-coverage:
 	@echo "Running tests with coverage..."
 	@go test -race -coverprofile=$(COVERAGE_FILE) -covermode=atomic ./...
 	@echo "Coverage report generated: $(COVERAGE_FILE)"
-	@go tool cover -func=$(COVERAGE_FILE)
+	@go tool cover -func=$(COVERAGE_FILE) | tail -1
 
 # View coverage in browser
 coverage-html: test-coverage

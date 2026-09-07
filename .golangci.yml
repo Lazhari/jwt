@@ -1,0 +1,19 @@
+version: "2"
+linters:
+  enable:
+    - errcheck
+    - govet
+    - staticcheck
+    - gosec
+    - revive
+    - unused
+    - ineffassign
+  settings:
+    gosec:
+      excludes:
+        - G304 # file paths come from the user's own flags
+        - G101 # test fixtures contain literal secrets
+formatters:
+  enable:
+    - gofmt
+    - goimports

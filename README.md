@@ -1,389 +1,248 @@
-# JWT CLI
+# jwt
 
 [![Go Version](https://img.shields.io/github/go-mod/go-version/lazhari/jwt)](https://go.dev/)
 [![CI](https://github.com/lazhari/jwt/workflows/CI/badge.svg)](https://github.com/lazhari/jwt/actions)
 [![Go Report Card](https://goreportcard.com/badge/github.com/lazhari/jwt)](https://goreportcard.com/report/github.com/lazhari/jwt)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 
-A fast, simple, and powerful command-line tool for creating, decoding, and inspecting JWT (JSON Web Tokens). Built with Go and Cobra.
+A command-line tool for creating, decoding, verifying, and debugging JSON
+Web Tokens. Every JWS algorithm, keys from PEM, JWK, JWKS files or URLs, a
+check-by-check verification report, key generation, and scriptable JSON
+output with real exit codes.
 
-## Features
-
-- **Sign JWT tokens** with HMAC algorithms (HS256, HS384, HS512)
-- **Decode and verify** JWT tokens with signature validation
-- **Inspect tokens** without verification (like jwt.io)
-- **Human-friendly time parsing** - Use `1d`, `5min`, `+30m`, `+7d` for expiration times
-- **Beautiful table output** - Clean, styled output using lipgloss
-- **JSON output option** - Machine-readable output for automation
-- **Standard JWT claims** - Support for iss, sub, aud, exp, nbf, iat, jti
-- **Auto-generate JTI** - UUID-style JWT ID generation
-- **Cross-platform** - Works on Linux, macOS, and Windows
-
-## Table of Contents
-
-- [Installation](#installation)
-- [Quick Start](#quick-start)
-- [Usage](#usage)
-  - [Sign Command](#sign-command)
-  - [Decode Command](#decode-command)
-  - [Inspect Command](#inspect-command)
-- [Examples](#examples)
-- [Time Formats](#time-formats)
-- [Algorithms](#algorithms)
-- [Building from Source](#building-from-source)
-- [Contributing](#contributing)
-- [Security](#security)
-- [License](#license)
-
-## Installation
-
-### Using Go
+## Install
 
 ```bash
 go install github.com/lazhari/jwt@latest
-```
-
-### Using Homebrew (macOS/Linux)
-
-```bash
+# or
 brew install lazhari/tap/jwt
 ```
 
-### Download Binary
+Binaries for Linux, macOS, and Windows are on the
+[releases page](https://github.com/lazhari/jwt/releases).
 
-Download the latest release for your platform from the [releases page](https://github.com/lazhari/jwt/releases).
-
-### Build from Source
-
-```bash
-git clone https://github.com/lazhari/jwt.git
-cd jwt
-make build
-# Binary will be in bin/jwt
-```
-
-## Quick Start
+## Quick start
 
 ```bash
-# Sign a JWT token
-jwt sign --payload '{"user_id":123,"role":"admin"}' --secret "your-secret-key" --exp "+1h"
+# Create a secret and sign a token
+export JWT_SECRET=$(jwt keygen --alg HS256)
+TOKEN=$(jwt sign --claim sub=user-1 --claim role=admin --exp +1h)
 
-# Decode and verify a JWT
-jwt decode YOUR_TOKEN_HERE --secret "your-secret-key"
+# Look inside without verifying
+jwt decode "$TOKEN"
 
-# Inspect a JWT without verification
-jwt inspect YOUR_TOKEN_HERE
+# Verify signature and claims
+jwt verify "$TOKEN" --aud api --iss https://auth.example.com
+
+# Script it
+jwt verify "$TOKEN" --json | jq .verification.valid
+jwt decode "$TOKEN" --part payload | jq -r .sub
 ```
 
-## Usage
+## Commands
 
-### Sign Command
+| Command | Purpose |
+|---------|---------|
+| `jwt sign` | Create and sign a token |
+| `jwt decode` | Show header, payload, and signature without verifying |
+| `jwt verify` | Verify signature and claims, print a report |
+| `jwt keygen` | Generate an HMAC secret or an RSA, EC, or Ed25519 key pair |
+| `jwt jwk convert` | Convert a key between PEM and JWK |
+| `jwt jwk fetch` | Download a JWKS, or one key by kid |
+| `jwt version` | Print version information |
+| `jwt completion` | Shell completion for bash, zsh, fish, PowerShell |
 
-Create and sign a new JWT token.
+Global flags: `--json` prints one JSON document; `--no-color` disables
+styling (so does the `NO_COLOR` environment variable or a non-terminal
+stdout).
 
-#### Basic Usage
+### Token input
+
+`decode` and `verify` take the token as the first argument, `-` for stdin,
+or `@file`. With no argument the token is read from piped stdin. A leading
+`Bearer ` prefix and surrounding whitespace are stripped.
 
 ```bash
-jwt sign --payload '{"user_id":123}' --secret "my-secret-key"
+curl -s https://auth.example.com/token | jq -r .access_token | jwt decode
+jwt verify @token.txt --key public.pem
 ```
 
-#### With Standard Claims
+### Keys
+
+`sign` and `verify` accept exactly one key source:
+
+| Flag | Meaning |
+|------|---------|
+| `--secret` | HMAC secret as text |
+| `--secret-b64` | HMAC secret, base64 or base64url encoded |
+| `--secret-file` | HMAC secret read from a file |
+| `--key` | PEM or JWK file, or `-` for stdin. Format is detected |
+| `--jwks-file` | JWKS file, key chosen by `kid` (verify only) |
+| `--jwks-url` | JWKS fetched over HTTPS, key chosen by `kid` (verify only) |
+| `--kid` | Override the `kid` used for JWKS lookup (verify only) |
+
+Environment fallbacks: `JWT_SECRET` for `--secret`, `JWT_KEY` for `--key`.
+
+The tool warns when an HMAC secret is below 32 bytes; use 32 bytes for
+HS256, 48 bytes for HS384, and 64 bytes for HS512. `jwt keygen` produces a
+secret of the right size for the algorithm you name.
+
+PEM inputs may be PKCS#1, PKCS#8, SEC1, PKIX, or an X.509 certificate.
+A private key given to `verify` is accepted and its public half is used.
+JWKS URLs must use HTTPS, except plain HTTP to localhost.
+
+### Algorithms
+
+| Family | Algorithms | Key |
+|--------|-----------|-----|
+| HMAC | HS256, HS384, HS512 | secret |
+| RSA PKCS#1 v1.5 | RS256, RS384, RS512 | RSA key |
+| RSA PSS | PS256, PS384, PS512 | RSA key |
+| ECDSA | ES256, ES384, ES512 | EC P-256, P-384, P-521 |
+| EdDSA | EdDSA | Ed25519 |
+| Unsigned | none | sign only, or verify with `--insecure-allow-none` |
+
+When `--alg` is omitted in `sign`, it is inferred from the key: HS256,
+RS256, ES256/ES384/ES512 by curve, or EdDSA. In `verify`, the allowed
+algorithms default to every algorithm the key type supports; pass `--alg`
+to narrow the list. A key that does not match the allowed algorithms is
+rejected before the token is checked.
+
+## sign
 
 ```bash
-jwt sign \
-  --payload '{"user_id":123}' \
-  --secret "my-secret-key" \
-  --iss "https://example.com" \
-  --sub "user123" \
-  --aud "https://api.example.com" \
-  --exp "+1h" \
-  --jti-auto
+jwt sign --secret "$JWT_SECRET" --payload '{"user_id":123}' --exp +1h
+jwt sign --key private.pem --alg PS256 --payload @claims.json --kid 2025-01
+jwt sign --secret "$JWT_SECRET" --claim role=admin --claim id=7 --aud api --aud web --jti-auto
+jwt sign --alg none --claim test=true        # unsigned fixture
 ```
 
-#### Available Flags
+Claims are merged in this order, later winning: `--payload`, then
+`--claim` flags, then the standard claim flags (`--iss`, `--sub`, `--aud`,
+`--exp`, `--nbf`, `--iat`, `--jti`). A `--claim` value that is valid JSON
+is parsed, so `id=7` is a number and `flag=true` a boolean; anything else
+is a string. Use `id='"7"'` for a string that looks like JSON.
 
-| Flag | Description | Example |
-|------|-------------|---------|
-| `--payload` | JSON payload (required) | `'{"user_id":123}'` |
-| `--secret` | Secret key for signing (required) | `"my-secret-key"` |
-| `--alg` | Algorithm (default: HS256) | `HS256`, `HS384`, `HS512` |
-| `--iss` | Issuer claim | `"https://example.com"` |
-| `--sub` | Subject claim | `"user123"` |
-| `--aud` | Audience claim (repeatable) | `"https://api.example.com"` |
-| `--exp` | Expiration time | `"+1h"`, `"1609459200"`, `"2024-01-01T00:00:00Z"` |
-| `--nbf` | Not Before time | `"+5m"`, `"1609459200"` |
-| `--iat` | Issued At time (default: now) | `"now"`, `"1609459200"` |
-| `--no-iat` | Omit Issued At claim | (boolean flag) |
-| `--jti` | JWT ID | `"unique-id-123"` |
-| `--jti-auto` | Auto-generate JWT ID | (boolean flag) |
+Header flags: `--kid`, `--typ` (default `JWT`), and repeatable
+`--header key=value`.
 
-### Decode Command
+Time flags accept `now`, a relative offset such as `+1h` or `-30m`
+(units: `d`, `h`, `m`/`min`, `s`/`sec`, or Go durations like `1h30m`), a
+Unix timestamp, or RFC 3339. Relative offsets are always relative to now.
+`iat` defaults to now; `--no-iat` omits it.
 
-Decode and verify a JWT token.
-
-#### Basic Usage
+## decode
 
 ```bash
-jwt decode YOUR_TOKEN --secret "my-secret-key"
+jwt decode "$TOKEN"
+jwt decode "$TOKEN" --json
+jwt decode "$TOKEN" --part payload | jq .
 ```
 
-#### JSON Output
+Timestamps are shown as the raw value, UTC time, and a relative note such
+as `expires in 2h13m` or `expired 3d ago`. Nested values are shown as
+compact JSON. Keys are sorted.
+
+`decode` tolerates base64 padding on the segments so a malformed token can
+still be inspected. `verify` does not: padded segments are rejected there,
+the way RFC 7515-strict servers reject them.
+
+## verify
 
 ```bash
-jwt decode YOUR_TOKEN --secret "my-secret-key" --json
+jwt verify "$TOKEN" --secret "$JWT_SECRET"
+jwt verify "$TOKEN" --key public.pem --iss https://auth.example.com --aud api --sub user-1
+jwt verify "$TOKEN" --jwks-url https://auth.example.com/.well-known/jwks.json
+jwt verify "$TOKEN" --secret "$JWT_SECRET" --leeway 30s --require exp,jti
+jwt verify "$TOKEN" --secret "$JWT_SECRET" --ignore-exp      # debug an old token
 ```
 
-#### Available Flags
+The report lists each check: `alg`, `crit` when the header carries one,
+`signature`, `exp`, `nbf` and `iat` when present, `iss`/`aud`/`sub` when
+expected values are given, and one `require:<claim>` line per `--require`
+entry. The header and payload are printed even when verification fails.
 
-| Flag | Description |
-|------|-------------|
-| `--secret` | Secret key for verification (required) |
-| `--json` | Output in JSON format |
+A JWK that declares `alg` narrows the default allowlist to that one
+algorithm, and a key marked `use: enc` is refused outright. A token whose
+header carries `crit` is rejected, since this tool implements no header
+extensions; `typ` is not checked.
 
-### Inspect Command
+Exit codes: `0` valid, `1` the token failed a check, `2` the token or key
+could not be read.
 
-Inspect a JWT token without verification (no secret required).
-
-#### Basic Usage
+## keygen
 
 ```bash
-jwt inspect YOUR_TOKEN
+jwt keygen --alg HS256                                # base64url secret on stdout
+jwt keygen --alg ES256 --out ec.pem --pub ec.pub      # PKCS#8 + PKIX PEM, mode 0600
+jwt keygen --alg RS256 --bits 4096 --format jwk --kid 2025-01
 ```
 
-#### JSON Output
+Files are never overwritten.
+
+## jwk
 
 ```bash
-jwt inspect YOUR_TOKEN --json
+jwt jwk convert --in private.pem --kid 2025-01 > private.jwk
+jwt jwk convert --in private.pem --public > public.jwk
+jwt jwk convert --in key.jwk > key.pem
+jwt jwk fetch https://auth.example.com/.well-known/jwks.json --kid abc
 ```
 
-#### Available Flags
+## JSON output
 
-| Flag | Description |
-|------|-------------|
-| `--json` | Output in JSON format |
+With `--json`, `decode` and `verify` print one document:
 
-## Examples
+```json
+{
+  "header": { "alg": "RS256", "kid": "abc", "typ": "JWT" },
+  "payload": { "exp": 1735740780, "sub": "user-1" },
+  "signature": "…",
+  "verification": {
+    "valid": true,
+    "algorithm": "RS256",
+    "key_source": "jwks:abc",
+    "checks": [
+      { "name": "alg", "passed": true, "skipped": false, "detail": "RS256" },
+      { "name": "signature", "passed": true, "skipped": false, "detail": "verified with jwks:abc" },
+      { "name": "exp", "passed": true, "skipped": false, "detail": "expires in 2h13m" }
+    ]
+  }
+}
+```
 
-### Create a token that expires in 1 hour
+`decode` omits `verification`. `sign --json` prints `token`, `header`, and
+`payload`.
+
+## Migrating from v1
+
+| v1 | v2 |
+|----|----|
+| `jwt decode TOKEN --secret S` | `jwt verify TOKEN --secret S` |
+| `jwt inspect TOKEN` | `jwt decode TOKEN` (`inspect` still works) |
+| `--json` printed labelled fragments | one JSON document |
+| errors on stdout, exit 0 | errors on stderr, exit 1 or 2 |
+| `--exp +1h` relative to `iat` | relative to now |
+
+## Building
 
 ```bash
-jwt sign \
-  --payload '{"user_id":123,"email":"user@example.com"}' \
-  --secret "super-secret-key" \
-  --exp "+1h"
+git clone https://github.com/lazhari/jwt.git && cd jwt
+make build          # bin/jwt
+make test           # go test -race ./...
+make test-coverage  # coverage report
+make lint           # golangci-lint
 ```
 
-### Create a token with multiple claims
+Requires Go 1.25 or later.
 
-```bash
-jwt sign \
-  --payload '{"data":"important"}' \
-  --secret "my-secret" \
-  --iss "auth-service" \
-  --sub "user-456" \
-  --aud "api-service" \
-  --aud "web-app" \
-  --exp "+7d" \
-  --jti-auto
-```
+## Security
 
-### Decode and verify a token
-
-```bash
-TOKEN="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoxMjN9.abc123"
-jwt decode $TOKEN --secret "my-secret"
-```
-
-### Inspect token without verification
-
-```bash
-# Useful for debugging or examining tokens when you don't have the secret
-jwt inspect $TOKEN
-```
-
-### Use environment variables for secrets
-
-```bash
-# More secure than passing secrets on command line
-export JWT_SECRET="my-secret-key"
-jwt sign --payload '{"user_id":123}' --secret "$JWT_SECRET"
-```
-
-### Generate a token for testing APIs
-
-```bash
-# Create a token for API testing
-TOKEN=$(jwt sign --payload '{"user_id":999,"role":"admin"}' --secret "test-key" --exp "+1d")
-echo "Authorization: Bearer $TOKEN"
-
-# Use with curl
-curl -H "Authorization: Bearer $TOKEN" https://api.example.com/protected
-```
-
-## Time Formats
-
-The `--exp`, `--nbf`, and `--iat` flags support multiple time formats:
-
-### Relative Time (from now)
-
-```bash
---exp "+1h"      # 1 hour from now
---exp "+30m"     # 30 minutes from now
---exp "+7d"      # 7 days from now
---exp "+60s"     # 60 seconds from now
---nbf "+5min"    # 5 minutes from now (alternative syntax)
-```
-
-Supported units: `d` (days), `h` (hours), `m`/`min` (minutes), `s`/`sec` (seconds)
-
-### Unix Timestamp
-
-```bash
---exp "1609459200"
-```
-
-### ISO 8601 / RFC 3339
-
-```bash
---exp "2024-12-31T23:59:59Z"
---exp "2024-06-15T10:30:00+02:00"
-```
-
-## Algorithms
-
-Currently supported HMAC algorithms:
-
-| Algorithm | Description | Key Size |
-|-----------|-------------|----------|
-| HS256 | HMAC-SHA256 (default) | 256 bits (32 bytes) |
-| HS384 | HMAC-SHA384 | 384 bits (48 bytes) |
-| HS512 | HMAC-SHA512 | 512 bits (64 bytes) |
-
-### Generating Strong Secrets
-
-```bash
-# Generate a strong secret (32 bytes for HS256)
-openssl rand -base64 32
-
-# Or use /dev/urandom
-head -c 32 /dev/urandom | base64
-```
-
-## Building from Source
-
-### Prerequisites
-
-- Go 1.21 or later
-- Make (optional, for using Makefile)
-
-### Build
-
-```bash
-# Clone the repository
-git clone https://github.com/lazhari/jwt.git
-cd jwt
-
-# Using Make
-make build
-
-# Or using Go directly
-go build -o jwt .
-```
-
-### Run Tests
-
-```bash
-# Using Make
-make test
-
-# With coverage
-make test-coverage
-
-# Or using Go directly
-go test ./...
-```
-
-### Available Make Targets
-
-```bash
-make help           # Show all available targets
-make build          # Build the binary
-make install        # Install to GOPATH/bin
-make test           # Run tests
-make test-coverage  # Run tests with coverage
-make lint           # Run golangci-lint
-make fmt            # Format code
-make clean          # Remove build artifacts
-```
-
-## Contributing
-
-We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for details on:
-
-- Setting up your development environment
-- Code style guidelines
-- Submitting pull requests
-- Reporting bugs
-- Requesting features
-
-Quick contribution steps:
-
-1. Fork the repository
-2. Create your feature branch: `git checkout -b feature/amazing-feature`
-3. Make your changes and add tests
-4. Run tests: `make test`
-5. Commit your changes: `git commit -m 'Add amazing feature'`
-6. Push to the branch: `git push origin feature/amazing-feature`
-7. Open a Pull Request
-
-## Security Best Practices
-
-**Protect your secrets:**
-- Use environment variables instead of command-line arguments
-  ```bash
-  export JWT_SECRET="my-secret-key"
-  jwt sign --payload '{"user_id":123}' --secret "$JWT_SECRET"
-  ```
-- Generate strong secrets: `openssl rand -base64 32`
-- Never commit secrets to version control
-
-**Token validation:**
-- Always verify tokens with `decode` command using the correct secret
-- Use `inspect` only for debugging (it doesn't verify signatures)
-- Set appropriate expiration times with `--exp`
-
-For security issues, please open a GitHub issue.
-
-## Roadmap
-
-Planned features for future releases:
-
-- [ ] RSA algorithm support (RS256, RS384, RS512)
-- [ ] ECDSA algorithm support (ES256, ES384, ES512)
-- [ ] Read secrets from files (`--secret-file`)
-- [ ] Interactive secret input
-- [ ] Config file support
-- [ ] Shell completion (bash, zsh, fish)
-- [ ] Token validation with custom claims
-- [ ] Batch token operations
-- [ ] Key generation utility
+See [SECURITY.md](SECURITY.md). Short version: keep secrets out of the
+command line, use `verify` not `decode` before trusting a token, never
+pass `--insecure-allow-none` outside of tests, and give HMAC secrets at
+least 32 bytes (48 for HS384, 64 for HS512).
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## Acknowledgments
-
-- Built with [Cobra](https://github.com/spf13/cobra) - CLI framework
-- JWT implementation by [golang-jwt/jwt](https://github.com/golang-jwt/jwt)
-- Beautiful terminal output by [Charm](https://github.com/charmbracelet) - Lipgloss
-
-## Support
-
-- **Issues**: [GitHub Issues](https://github.com/lazhari/jwt/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/lazhari/jwt/discussions)
-- **Documentation**: [GitHub Wiki](https://github.com/lazhari/jwt/wiki)
-
----
-
-Made with ❤️ by [Lazhari](https://github.com/lazhari)
+MIT. See [LICENSE](LICENSE).
