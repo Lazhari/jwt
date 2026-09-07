@@ -1,239 +1,147 @@
 package cmd
 
 import (
-	"crypto/rand"
+	"bytes"
 	"encoding/json"
 	"fmt"
-	"strconv"
-	"strings"
-	"time"
 
-	"github.com/golang-jwt/jwt/v5"
 	"github.com/spf13/cobra"
+
+	"github.com/lazhari/jwt/internal/keys"
+	"github.com/lazhari/jwt/internal/output"
+	"github.com/lazhari/jwt/internal/token"
 )
 
-// signCmd represents the sign command
-var signCmd = &cobra.Command{
-	Use:   "sign",
-	Short: "Sign a JWT token",
-	Long:  `Sign a JWT token with the provided payload, key, and algorithm. Supports standard JWT claims.`,
-	Run: func(cmd *cobra.Command, args []string) {
-		payload, _ := cmd.Flags().GetString("payload")
-		secret, _ := cmd.Flags().GetString("secret")
-		alg, _ := cmd.Flags().GetString("alg")
+type signFlags struct {
+	keys    keyFlags
+	payload string
+	claims  []string
+	iss     string
+	sub     string
+	aud     []string
+	exp     string
+	nbf     string
+	iat     string
+	noIat   bool
+	jti     string
+	jtiAuto bool
+	alg     string
+	kid     string
+	typ     string
+	headers []string
+}
 
-		var method jwt.SigningMethod
-		switch alg {
-		case "HS256":
-			method = jwt.SigningMethodHS256
-		case "HS384":
-			method = jwt.SigningMethodHS384
-		case "HS512":
-			method = jwt.SigningMethodHS512
-		default:
-			fmt.Println("Unsupported algorithm")
-			return
-		}
+func newSignCmd(streams *ioStreams) *cobra.Command {
+	var f signFlags
+	cmd := &cobra.Command{
+		Use:   "sign",
+		Short: "Create and sign a token",
+		Long: `Create and sign a token. Claims come from --payload (a JSON object),
+repeatable --claim key=value flags, and the standard claim flags; later
+sources win. Relative times such as +1h are relative to now.
 
-		claims := jwt.MapClaims{}
-		err := json.Unmarshal([]byte(payload), &claims)
+The algorithm defaults to the key type: HS256 for secrets, RS256 for RSA,
+ES256/ES384/ES512 for EC by curve, EdDSA for Ed25519.`,
+		Example: `  jwt sign --secret "$JWT_SECRET" --claim sub=u1 --exp +1h
+  jwt sign --key private.pem --alg PS256 --payload @claims.json --kid k1
+  jwt sign --alg none --claim test=true`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return runSign(cmd, streams, &f)
+		},
+	}
+	f.keys.bind(cmd, false)
+	fs := cmd.Flags()
+	fs.StringVar(&f.payload, "payload", "", "JSON object of claims: a string, @file, or - for stdin")
+	fs.StringArrayVar(&f.claims, "claim", nil, "Claim as key=value; JSON values are parsed (repeatable)")
+	fs.StringVar(&f.iss, "iss", "", "Issuer claim")
+	fs.StringVar(&f.sub, "sub", "", "Subject claim")
+	fs.StringArrayVar(&f.aud, "aud", nil, "Audience claim (repeatable; one value is a string, several are an array)")
+	fs.StringVar(&f.exp, "exp", "", "Expiration: +1h, Unix seconds, or RFC 3339")
+	fs.StringVar(&f.nbf, "nbf", "", "Not-before: +5m, Unix seconds, or RFC 3339")
+	fs.StringVar(&f.iat, "iat", "", "Issued-at (default now): now, -1m, Unix seconds, or RFC 3339")
+	fs.BoolVar(&f.noIat, "no-iat", false, "Omit the iat claim")
+	fs.StringVar(&f.jti, "jti", "", "JWT ID claim")
+	fs.BoolVar(&f.jtiAuto, "jti-auto", false, "Generate a random UUID for the jti claim")
+	fs.StringVar(&f.alg, "alg", "", "Algorithm (default by key type), or none")
+	fs.StringVar(&f.kid, "kid", "", "Key ID header")
+	fs.StringVar(&f.typ, "typ", "JWT", "Type header")
+	fs.StringArrayVar(&f.headers, "header", nil, "Extra header member as key=value (repeatable)")
+	return cmd
+}
+
+func runSign(cmd *cobra.Command, streams *ioStreams, f *signFlags) error {
+	payload := map[string]any{}
+	if f.payload != "" {
+		raw, err := readInput(f.payload, streams.in)
 		if err != nil {
-			fmt.Println("Invalid JSON payload:", err)
-			return
+			return usageError(fmt.Errorf("--payload: %w", err))
 		}
-
-		iss, _ := cmd.Flags().GetString("iss")
-		if iss != "" {
-			claims["iss"] = iss
+		dec := json.NewDecoder(bytes.NewReader(raw))
+		dec.UseNumber()
+		if err := dec.Decode(&payload); err != nil || payload == nil {
+			return usageError(fmt.Errorf("--payload: not a JSON object"))
 		}
+	}
+	extra, err := token.ParseKVs(f.claims)
+	if err != nil {
+		return usageError(fmt.Errorf("--claim: %w", err))
+	}
+	claims, err := token.BuildClaims(token.ClaimsInput{
+		Payload:  payload,
+		Claims:   extra,
+		Issuer:   f.iss,
+		Subject:  f.sub,
+		Audience: f.aud,
+		Exp:      f.exp,
+		Nbf:      f.nbf,
+		Iat:      f.iat,
+		NoIat:    f.noIat,
+		JTI:      f.jti,
+		JTIAuto:  f.jtiAuto,
+		Now:      streams.now(),
+	})
+	if err != nil {
+		return usageError(err)
+	}
 
-		sub, _ := cmd.Flags().GetString("sub")
-		if sub != "" {
-			claims["sub"] = sub
-		}
+	header, err := token.ParseKVs(f.headers)
+	if err != nil {
+		return usageError(fmt.Errorf("--header: %w", err))
+	}
+	if f.kid != "" {
+		header["kid"] = f.kid
+	}
+	if f.typ != "" {
+		header["typ"] = f.typ
+	}
 
-		aud, _ := cmd.Flags().GetStringSlice("aud")
-		if len(aud) > 0 {
-			if len(aud) == 1 {
-				claims["aud"] = aud[0]
-			} else {
-				claims["aud"] = aud
-			}
-		}
-
-		// Determine iat time
-		var iatTime time.Time
-		iatStr, _ := cmd.Flags().GetString("iat")
-		noIat, _ := cmd.Flags().GetBool("no-iat")
-		if !noIat {
-			if iatStr == "" || iatStr == "now" {
-				iatTime = time.Now()
-				claims["iat"] = iatTime.Unix()
-			} else {
-				if strings.HasPrefix(iatStr, "+") || strings.HasPrefix(iatStr, "-") {
-					sign := 1
-					if strings.HasPrefix(iatStr, "-") {
-						sign = -1
-					}
-					dur, err := parseDuration(iatStr[1:])
-					if err != nil {
-						fmt.Println("Invalid iat:", err)
-						return
-					}
-					iatTime = time.Now().Add(time.Duration(sign) * dur)
-				} else {
-					iatUnix, err := parseTime(iatStr)
-					if err != nil {
-						fmt.Println("Invalid iat:", err)
-						return
-					}
-					iatTime = time.Unix(iatUnix, 0)
-				}
-				claims["iat"] = iatTime.Unix()
-			}
-		} else {
-			iatTime = time.Now()
-		}
-
-		expStr, _ := cmd.Flags().GetString("exp")
-		if expStr != "" {
-			if strings.HasPrefix(expStr, "+") || strings.HasPrefix(expStr, "-") {
-				sign := 1
-				if strings.HasPrefix(expStr, "-") {
-					sign = -1
-				}
-				dur, err := parseDuration(expStr[1:])
-				if err != nil {
-					fmt.Println("Invalid exp:", err)
-					return
-				}
-				expTime := iatTime.Add(time.Duration(sign) * dur)
-				claims["exp"] = expTime.Unix()
-			} else {
-				expUnix, err := parseTime(expStr)
-				if err != nil {
-					fmt.Println("Invalid exp:", err)
-					return
-				}
-				claims["exp"] = expUnix
-			}
-		}
-
-		nbfStr, _ := cmd.Flags().GetString("nbf")
-		if nbfStr != "" {
-			if strings.HasPrefix(nbfStr, "+") || strings.HasPrefix(nbfStr, "-") {
-				sign := 1
-				if strings.HasPrefix(nbfStr, "-") {
-					sign = -1
-				}
-				dur, err := parseDuration(nbfStr[1:])
-				if err != nil {
-					fmt.Println("Invalid nbf:", err)
-					return
-				}
-				nbfTime := iatTime.Add(time.Duration(sign) * dur)
-				claims["nbf"] = nbfTime.Unix()
-			} else {
-				nbfUnix, err := parseTime(nbfStr)
-				if err != nil {
-					fmt.Println("Invalid nbf:", err)
-					return
-				}
-				claims["nbf"] = nbfUnix
-			}
-		}
-
-		jtiStr, _ := cmd.Flags().GetString("jti")
-		jtiAuto, _ := cmd.Flags().GetBool("jti-auto")
-		if jtiAuto {
-			if jtiStr != "" {
-				fmt.Println("Cannot specify both --jti and --jti-auto")
-				return
-			}
-			claims["jti"] = generateJTI()
-		} else if jtiStr != "" {
-			claims["jti"] = jtiStr
-		}
-
-		token := jwt.NewWithClaims(method, claims)
-		tokenString, err := token.SignedString([]byte(secret))
+	var key *keys.Key
+	if f.alg != "none" {
+		// The header kid also selects the key: --key may name a JWKS with
+		// several private keys, and --kid says which one to sign with.
+		src := f.keys.source(streams)
+		src.KID = f.kid
+		key, err = keys.Load(src, header)
 		if err != nil {
-			fmt.Println("Error signing token:", err)
-			return
+			return usageError(err)
 		}
+	}
 
-		fmt.Println(tokenString)
-	},
-}
-
-func init() {
-	rootCmd.AddCommand(signCmd)
-
-	signCmd.Flags().String("payload", "", "JSON payload to sign")
-	signCmd.Flags().String("secret", "", "Secret key")
-	signCmd.Flags().String("alg", "HS256", "Algorithm (HS256, HS384, HS512)")
-	signCmd.Flags().String("iss", "", "Issuer")
-	signCmd.Flags().String("sub", "", "Subject")
-	signCmd.Flags().StringSlice("aud", []string{}, "Audience")
-	signCmd.Flags().String("exp", "", "Expiration time (Unix timestamp, ISO 8601, or relative +1h +30m +7d)")
-	signCmd.Flags().String("nbf", "", "Not Before time (Unix timestamp, ISO 8601, or relative +10m)")
-	signCmd.Flags().String("iat", "", "Issued At time (now, Unix timestamp, or omit with --no-iat)")
-	signCmd.Flags().Bool("no-iat", false, "Omit Issued At claim")
-	signCmd.Flags().String("jti", "", "JWT ID")
-	signCmd.Flags().Bool("jti-auto", false, "Auto generate JWT ID")
-	signCmd.MarkFlagRequired("payload")
-	signCmd.MarkFlagRequired("secret")
-}
-
-// parseDuration converts a human-friendly duration string to time.Duration.
-// Supported formats: "7d" (days), "2h" (hours), "30m"/"30min" (minutes), "60s"/"60sec" (seconds).
-// Returns an error if the format is invalid or the unit is not recognized.
-func parseDuration(s string) (time.Duration, error) {
-	var num int
-	var unit string
-	_, err := fmt.Sscanf(s, "%d%s", &num, &unit)
+	tok, err := token.Sign(token.SignInput{Payload: claims, Header: header, Alg: f.alg, Key: key})
 	if err != nil {
-		return 0, fmt.Errorf("invalid format: %s", s)
+		return usageError(err)
 	}
-	var dur time.Duration
-	switch unit {
-	case "d":
-		dur = time.Duration(num) * 24 * time.Hour
-	case "h":
-		dur = time.Duration(num) * time.Hour
-	case "m", "min":
-		dur = time.Duration(num) * time.Minute
-	case "s", "sec":
-		dur = time.Duration(num) * time.Second
-	default:
-		return 0, fmt.Errorf("unknown unit: %s", unit)
+
+	if jsonWanted(cmd) {
+		d, err := token.Decode(tok)
+		if err != nil {
+			return err
+		}
+		return output.WriteJSON(streams.out, map[string]any{"token": tok, "header": d.Header, "payload": d.Payload})
 	}
-	return dur, nil
+	_, err = fmt.Fprintln(streams.out, tok)
+	return err
 }
 
-// parseTime converts a time string to Unix timestamp (seconds since epoch).
-// Supports two formats:
-// - Unix timestamp: "1609459200"
-// - ISO 8601 / RFC 3339: "2024-01-01T00:00:00Z" or "2024-01-01T00:00:00+02:00"
-// Returns the Unix timestamp or an error if the format is not recognized.
-func parseTime(s string) (int64, error) {
-	// try Unix timestamp
-	if unix, err := strconv.ParseInt(s, 10, 64); err == nil {
-		return unix, nil
-	}
-	// try ISO 8601
-	t, err := time.Parse(time.RFC3339, s)
-	if err != nil {
-		return 0, fmt.Errorf("invalid time format: %s", s)
-	}
-	return t.Unix(), nil
-}
-
-// generateJTI generates a UUID-style JWT ID (jti) claim value.
-// Returns a string in the format: "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" where x is a hex digit.
-// Uses crypto/rand for cryptographically secure random number generation.
-func generateJTI() string {
-	b := make([]byte, 16)
-	rand.Read(b)
-	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:])
-}
+func init() { commandBuilders = append(commandBuilders, newSignCmd) }

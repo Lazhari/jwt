@@ -1,118 +1,71 @@
 package cmd
 
 import (
-	"encoding/json"
 	"fmt"
-	"time"
 
-	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/lipgloss/table"
-	"github.com/golang-jwt/jwt/v5"
 	"github.com/spf13/cobra"
+
+	"github.com/lazhari/jwt/internal/output"
+	"github.com/lazhari/jwt/internal/token"
 )
 
-// decodeCmd represents the decode command
-var decodeCmd = &cobra.Command{
-	Use:   "decode",
-	Short: "Decode a JWT token",
-	Long:  `Decode and verify a JWT token with the provided key.`,
-	Run: func(cmd *cobra.Command, args []string) {
-		if len(args) != 1 {
-			fmt.Println("Usage: jwt decode <token>")
-			return
-		}
+func newDecodeCmd(streams *ioStreams) *cobra.Command {
+	var part string
+	cmd := &cobra.Command{
+		Use:   "decode [token]",
+		Short: "Show header, payload, and signature without verifying",
+		Long: `Decode a token without checking its signature or claims. The token is
+the first argument, - for stdin, or @file; with no argument it is read from
+piped stdin. A leading "Bearer " prefix is stripped.`,
+		Example: `  jwt decode eyJhbGciOi...
+  curl -s ... | jq -r .access_token | jwt decode
+  jwt decode "$TOKEN" --part payload | jq .sub`,
+		Args: cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runDecode(cmd, streams, args, part)
+		},
+	}
+	cmd.Flags().StringVar(&part, "part", "", "Print only one part as raw JSON: header, payload, or signature")
+	return cmd
+}
 
-		tokenString := args[0]
-		secret, _ := cmd.Flags().GetString("secret")
+// newInspectCmd keeps the v1 name working as a hidden alias.
+func newInspectCmd(streams *ioStreams) *cobra.Command {
+	cmd := newDecodeCmd(streams)
+	cmd.Use = "inspect [token]"
+	cmd.Short = "Alias of decode"
+	cmd.Hidden = true
+	return cmd
+}
 
-		token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-			return []byte(secret), nil
-		})
-
-		if err != nil {
-			fmt.Println("Error parsing token:", err)
-			return
-		}
-
-		if claims, ok := token.Claims.(jwt.MapClaims); ok {
-			jsonFlag, _ := cmd.Flags().GetBool("json")
-			if jsonFlag {
-				// Output in JSON format
-				headerJSON, _ := json.MarshalIndent(token.Header, "", "  ")
-				fmt.Println("Header:")
-				fmt.Println(string(headerJSON))
-
-				payloadJSON, _ := json.MarshalIndent(claims, "", "  ")
-				fmt.Println("Payload:")
-				fmt.Println(string(payloadJSON))
-
-				fmt.Println("Valid:", token.Valid)
-			} else {
-				// Print Header
-				fmt.Println("Header:")
-				headerTable := table.New().
-					Border(lipgloss.NormalBorder()).
-					BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color("99"))).
-					Headers("Key", "Value").
-					StyleFunc(func(row, col int) lipgloss.Style {
-						switch col {
-						case 0:
-							return lipgloss.NewStyle().Width(12)
-						case 1:
-							return lipgloss.NewStyle().Width(30)
-						default:
-							return lipgloss.NewStyle()
-						}
-					})
-				for k, v := range token.Header {
-					headerTable.Row(k, fmt.Sprintf("%v", v))
-				}
-				fmt.Println(headerTable.Render())
-
-				// Print Payload
-				fmt.Println("Payload:")
-				payloadTable := table.New().
-					Border(lipgloss.NormalBorder()).
-					BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color("99"))).
-					Headers("Key", "Value").
-					StyleFunc(func(row, col int) lipgloss.Style {
-						switch col {
-						case 0:
-							return lipgloss.NewStyle().Width(12)
-						case 1:
-							return lipgloss.NewStyle().Width(30)
-						default:
-							return lipgloss.NewStyle()
-						}
-					})
-				for k, v := range claims {
-					var value string
-					if k == "exp" || k == "iat" || k == "nbf" {
-						if expFloat, ok := v.(float64); ok {
-							expTime := time.Unix(int64(expFloat), 0)
-							value = expTime.Format("2006-01-02 15:04:05 MST")
-						} else {
-							value = fmt.Sprintf("%v", v)
-						}
-					} else {
-						value = fmt.Sprintf("%v", v)
-					}
-					payloadTable.Row(k, value)
-				}
-				fmt.Println(payloadTable.Render())
-
-				fmt.Println("Valid:", token.Valid)
-			}
-		} else {
-			fmt.Println("Invalid token")
-		}
-	},
+func runDecode(cmd *cobra.Command, streams *ioStreams, args []string, part string) error {
+	tok, err := tokenArg(args, streams.in)
+	if err != nil {
+		return err
+	}
+	d, err := token.Decode(tok)
+	if err != nil {
+		return usageError(err)
+	}
+	switch part {
+	case "":
+	case "header":
+		return output.WriteJSON(streams.out, d.Header)
+	case "payload":
+		return output.WriteJSON(streams.out, d.Payload)
+	case "signature":
+		_, err := fmt.Fprintln(streams.out, d.Signature)
+		return err
+	default:
+		return usageError(fmt.Errorf("--part must be header, payload, or signature, got %q", part))
+	}
+	res := &token.Result{Decoded: d}
+	if jsonWanted(cmd) {
+		return output.JSON(streams.out, res)
+	}
+	return output.Table(streams.out, res, renderOptions(cmd, streams))
 }
 
 func init() {
-	rootCmd.AddCommand(decodeCmd)
-
-	decodeCmd.Flags().String("secret", "", "Secret key for verification")
-	decodeCmd.Flags().Bool("json", false, "Output in JSON format")
-	decodeCmd.MarkFlagRequired("secret")
+	commandBuilders = append(commandBuilders, newDecodeCmd, newInspectCmd)
 }
