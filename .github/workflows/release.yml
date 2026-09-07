@@ -34,3 +34,5 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Fine-grained PAT with Contents read/write on lazhari/homebrew-tap.
           HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+          # Gemfury push token for the apt, yum, and apk repositories.
+          FURY_TOKEN: ${{ secrets.FURY_TOKEN }}

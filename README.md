@@ -47,8 +47,28 @@ wget "https://github.com/lazhari/jwt/releases/download/v${VERSION}/jwt_${VERSION
 sudo apk add --allow-untrusted "./jwt_${VERSION}_linux_${ARCH}.apk"
 ```
 
-The packages are not signed yet, which is why Alpine needs `--allow-untrusted`.
-Package repositories for `apt install jwt` and `apk add jwt` are planned.
+### Package repositories (apt, dnf, apk)
+
+Releases are also pushed to a Gemfury repository, so you can add it once and
+get updates with your package manager.
+
+```bash
+# Debian and Ubuntu
+echo "deb [trusted=yes] https://apt.fury.io/lazhari/ /" | sudo tee /etc/apt/sources.list.d/lazhari.list
+sudo apt update && sudo apt install jwt
+
+# Fedora, RHEL, and openSUSE
+printf '[lazhari]\nname=lazhari\nbaseurl=https://yum.fury.io/lazhari/\nenabled=1\ngpgcheck=0\n' | sudo tee /etc/yum.repos.d/lazhari.repo
+sudo dnf install jwt
+
+# Alpine
+echo "https://alpine.fury.io/lazhari/" | sudo tee -a /etc/apk/repositories
+sudo apk add --allow-untrusted jwt
+```
+
+The packages are not GPG-signed yet, which is why the apt line uses
+`trusted=yes`, the yum repo sets `gpgcheck=0`, and Alpine needs
+`--allow-untrusted`. Signed packages are planned.
 
 ### Prebuilt binaries
 

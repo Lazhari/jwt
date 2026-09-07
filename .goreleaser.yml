@@ -138,8 +138,26 @@ homebrew_casks:
             system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/jwt"]
           end
 
+# Linux package repositories on Gemfury (apt, yum/dnf, apk). GoReleaser's
+# built-in Fury publisher is Pro-only, so this uses a custom publisher that
+# uploads each .deb/.rpm/.apk to Fury's push endpoint. Users add
+# https://apt.fury.io/lazhari/ (or yum./alpine.) once and then install "jwt"
+# with their package manager. Needs FURY_TOKEN (a Fury push token) in the
+# release workflow; the token is passed through the environment, not argv,
+# so it never appears in logs.
+publishers:
+  - name: fury.io
+    ids: [linux-packages]  # only the .deb/.rpm/.apk, not the archives
+    checksum: false
+    signature: false
+    env:
+      - FURY_TOKEN={{ .Env.FURY_TOKEN }}
+    cmd: >-
+      sh -c 'curl -sSf -u "$FURY_TOKEN:" -F "package=@$0" https://push.fury.io/lazhari/'
+      {{ abs .ArtifactPath }}
+
 nfpms:
-  - id: jwt
+  - id: linux-packages
     package_name: jwt
     vendor: Lazhari
     homepage: https://github.com/lazhari/jwt
