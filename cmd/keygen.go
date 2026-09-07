@@ -205,11 +205,11 @@ func writeNewFile(path string, data []byte) error {
 		_ = fh.Close()
 		// Remove the partially written file so a retry is not blocked by
 		// the O_EXCL check above finding leftover, truncated content.
-		os.Remove(path)
+		_ = os.Remove(path) // best effort; the write error is what matters
 		return err
 	}
 	if err := fh.Close(); err != nil {
-		os.Remove(path)
+		_ = os.Remove(path) // best effort; the close error is what matters
 		return err
 	}
 	return nil

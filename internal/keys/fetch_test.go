@@ -30,7 +30,7 @@ func TestFetchHTTPS(t *testing.T) {
 }
 
 func TestFetchLoopbackHTTPAllowed(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(jwksBody))
 	}))
 	defer srv.Close()
@@ -88,7 +88,7 @@ func TestFetchRedirectToHTTPRefused(t *testing.T) {
 }
 
 func TestFetchTimeout(t *testing.T) {
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 		select {
 		case <-r.Context().Done():
 		case <-time.After(2 * time.Second):

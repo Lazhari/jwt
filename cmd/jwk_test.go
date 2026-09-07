@@ -84,7 +84,7 @@ func TestJWKFetch(t *testing.T) {
 	_, _, ecKey := ecPair(t, ellipticP384())
 	j, _ := jwk.FromKey(&ecKey.PublicKey, "ec1")
 	set, _ := json.Marshal(jwk.Set{Keys: []jwk.Key{*j}})
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write(set)
 	}))
 	defer srv.Close()

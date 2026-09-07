@@ -199,7 +199,7 @@ func TestVerifyJWKS(t *testing.T) {
 		t.Errorf("wrong kid should fail alg check (ES384 vs RSA key): %+v", r)
 	}
 
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write(set)
 	}))
 	defer srv.Close()
