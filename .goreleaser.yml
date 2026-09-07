@@ -34,7 +34,7 @@ builds:
 
 archives:
   - id: jwt
-    format: tar.gz
+    formats: [tar.gz]
     name_template: >-
       {{ .ProjectName }}_
       {{- .Version }}_
@@ -45,7 +45,7 @@ archives:
       {{- if .Arm }}v{{ .Arm }}{{ end }}
     format_overrides:
       - goos: windows
-        format: zip
+        formats: [zip]
     files:
       - README.md
       - LICENSE
@@ -112,18 +112,31 @@ release:
 
     **Full Changelog**: https://github.com/lazhari/jwt/compare/{{ .PreviousTag }}...{{ .Tag }}
 
-brews:
-  - repository:
+# Homebrew: published to the lazhari/homebrew-tap repository as a cask, which is
+# the GoReleaser v2 way to ship prebuilt CLI binaries. Users run:
+#   brew install lazhari/tap/jwt
+# Publishing needs a token with write access to the tap repository; the
+# default Actions token cannot write to another repository.
+homebrew_casks:
+  - name: jwt
+    repository:
       owner: lazhari
       name: homebrew-tap
-    folder: Formula
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    directory: Casks
     homepage: https://github.com/lazhari/jwt
-    description: A simple CLI tool for creating and decoding JWT tokens
+    description: Sign, decode, verify, and inspect JSON Web Tokens
     license: MIT
-    test: |
-      system "#{bin}/jwt --help"
-    install: |
-      bin.install "jwt"
+    binaries:
+      - jwt
+    # The binaries are not code-signed, so macOS quarantines them on first run.
+    # Clearing the attribute after install is the documented GoReleaser workaround.
+    hooks:
+      post:
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/jwt"]
+          end
 
 nfpms:
   - id: jwt
@@ -131,7 +144,7 @@ nfpms:
     vendor: Lazhari
     homepage: https://github.com/lazhari/jwt
     maintainer: Lazhari <https://github.com/lazhari>
-    description: A simple CLI tool for creating and decoding JWT tokens
+    description: Sign, decode, verify, and inspect JSON Web Tokens
     license: MIT
     formats:
       - deb
