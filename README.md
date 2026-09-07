@@ -12,14 +12,61 @@ output with real exit codes.
 
 ## Install
 
+### Homebrew (macOS and Linux)
+
 ```bash
-go install github.com/lazhari/jwt@latest
-# or
 brew install lazhari/tap/jwt
 ```
 
-Binaries for Linux, macOS, and Windows are on the
-[releases page](https://github.com/lazhari/jwt/releases).
+### Go
+
+```bash
+go install github.com/lazhari/jwt@latest
+```
+
+### Debian and Ubuntu
+
+```bash
+VERSION=2.0.0 ARCH=amd64   # ARCH: amd64, arm64, or armv7
+curl -LO "https://github.com/lazhari/jwt/releases/download/v${VERSION}/jwt_${VERSION}_linux_${ARCH}.deb"
+sudo apt install "./jwt_${VERSION}_linux_${ARCH}.deb"
+```
+
+### Fedora, RHEL, and openSUSE
+
+```bash
+VERSION=2.0.0 ARCH=amd64
+sudo dnf install "https://github.com/lazhari/jwt/releases/download/v${VERSION}/jwt_${VERSION}_linux_${ARCH}.rpm"
+```
+
+### Alpine
+
+```bash
+VERSION=2.0.0 ARCH=amd64
+wget "https://github.com/lazhari/jwt/releases/download/v${VERSION}/jwt_${VERSION}_linux_${ARCH}.apk"
+sudo apk add --allow-untrusted "./jwt_${VERSION}_linux_${ARCH}.apk"
+```
+
+The packages are not signed yet, which is why Alpine needs `--allow-untrusted`.
+Package repositories for `apt install jwt` and `apk add jwt` are planned.
+
+### Prebuilt binaries
+
+Archives for Linux (x86_64, arm64, armv7), macOS (x86_64, arm64), and Windows
+(x86_64) are attached to every release on the
+[releases page](https://github.com/lazhari/jwt/releases), together with a
+`checksums.txt` file.
+
+```bash
+VERSION=2.0.0
+curl -LO "https://github.com/lazhari/jwt/releases/download/v${VERSION}/jwt_${VERSION}_Linux_x86_64.tar.gz"
+curl -LO "https://github.com/lazhari/jwt/releases/download/v${VERSION}/checksums.txt"
+sha256sum --ignore-missing -c checksums.txt
+tar -xzf "jwt_${VERSION}_Linux_x86_64.tar.gz" jwt && sudo install -m 0755 jwt /usr/local/bin/jwt
+```
+
+On macOS use `shasum -a 256 --ignore-missing -c checksums.txt` and the
+`Darwin_arm64` or `Darwin_x86_64` archive.
 
 ## Quick start
 
