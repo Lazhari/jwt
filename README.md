@@ -12,6 +12,20 @@ output with real exit codes.
 
 ## Install
 
+### Quick install (Linux and macOS)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/lazhari/jwt/main/install.sh | sh
+```
+
+The script picks the release archive for your OS and CPU, verifies its
+SHA-256 against the release's `checksums.txt`, and installs `jwt` into
+`/usr/local/bin` when that is writable or `~/.local/bin` otherwise. It never
+runs `sudo`; use `curl -fsSL ... | sudo sh` for a system-wide install. Set
+`JWT_VERSION=2.0.1` to pin a release or `JWT_INSTALL_DIR=/some/dir` to choose
+the location. Piping a script into a shell is convenient, not mandatory: you
+can download [install.sh](install.sh), read it, and run it with `sh`.
+
 ### Homebrew (macOS and Linux)
 
 ```bash

@@ -59,6 +59,9 @@ jobs:
         go-version: 'stable'
         cache: true
 
+    - name: Lint install script
+      run: shellcheck -s sh install.sh
+
     - name: Run golangci-lint
       uses: golangci/golangci-lint-action@v9
       with:
