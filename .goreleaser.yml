@@ -150,7 +150,7 @@ homebrew_casks:
 # so it never appears in logs.
 publishers:
   - name: fury.io
-    ids: [linux-packages]  # only the .deb/.rpm/.apk, not the archives
+    ids: [deb-package, rpm-apk-packages]  # only the .deb/.rpm/.apk, not the archives
     checksum: false
     signature: false
     env:
@@ -160,8 +160,16 @@ publishers:
       {{ abs .ArtifactPath }}
 
 nfpms:
-  - id: linux-packages
-    package_name: jwt
+  # Debian and Ubuntu ship an unrelated package called "jwt" (the golang-jwt
+  # project's CLI), so the .deb is named jwt-cli. Fedora and Alpine have no
+  # "jwt" package, so the .rpm and .apk keep the plain name. Alpine's community
+  # repository has a different tool called jwt-cli that also installs
+  # /usr/bin/jwt, hence the conflict on it. Every package installs /usr/bin/jwt.
+  - id: deb-package
+    package_name: jwt-cli
+    file_name_template: "{{ .PackageName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ with .Arm }}v{{ . }}{{ end }}"
+    conflicts:
+      - jwt
     vendor: Lazhari
     homepage: https://github.com/lazhari/jwt
     maintainer: Lazhari <https://github.com/lazhari>
@@ -169,6 +177,18 @@ nfpms:
     license: MIT
     formats:
       - deb
+    bindir: /usr/bin
+  - id: rpm-apk-packages
+    package_name: jwt
+    file_name_template: "{{ .PackageName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ with .Arm }}v{{ . }}{{ end }}"
+    conflicts:
+      - jwt-cli
+    vendor: Lazhari
+    homepage: https://github.com/lazhari/jwt
+    maintainer: Lazhari <https://github.com/lazhari>
+    description: Sign, decode, verify, and inspect JSON Web Tokens
+    license: MIT
+    formats:
       - rpm
       - apk
     bindir: /usr/bin

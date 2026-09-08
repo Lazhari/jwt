@@ -28,8 +28,8 @@ go install github.com/lazhari/jwt@latest
 
 ```bash
 VERSION=2.0.0 ARCH=amd64   # ARCH: amd64, arm64, or armv7
-curl -LO "https://github.com/lazhari/jwt/releases/download/v${VERSION}/jwt_${VERSION}_linux_${ARCH}.deb"
-sudo apt install "./jwt_${VERSION}_linux_${ARCH}.deb"
+curl -LO "https://github.com/lazhari/jwt/releases/download/v${VERSION}/jwt-cli_${VERSION}_linux_${ARCH}.deb"
+sudo apt install "./jwt-cli_${VERSION}_linux_${ARCH}.deb"
 ```
 
 ### Fedora, RHEL, and openSUSE
@@ -55,7 +55,7 @@ get updates with your package manager.
 ```bash
 # Debian and Ubuntu
 echo "deb [trusted=yes] https://apt.fury.io/lazhari/ /" | sudo tee /etc/apt/sources.list.d/lazhari.list
-sudo apt update && sudo apt install jwt
+sudo apt update && sudo apt install jwt-cli
 
 # Fedora, RHEL, and openSUSE
 printf '[lazhari]\nname=lazhari\nbaseurl=https://yum.fury.io/lazhari/\nenabled=1\ngpgcheck=0\n' | sudo tee /etc/yum.repos.d/lazhari.repo
@@ -69,6 +69,10 @@ sudo apk add --allow-untrusted jwt
 The packages are not GPG-signed yet, which is why the apt line uses
 `trusted=yes`, the yum repo sets `gpgcheck=0`, and Alpine needs
 `--allow-untrusted`. Signed packages are planned.
+
+Package names differ by family on purpose: `jwt-cli` on Debian and Ubuntu,
+because those distributions already ship an unrelated package called `jwt`,
+and `jwt` on Fedora and Alpine. The installed command is `jwt` everywhere.
 
 ### Prebuilt binaries
 

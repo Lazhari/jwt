@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.1] - 2026-09-08
+
+### Changed
+- The Debian package is now named `jwt-cli`, because Debian and Ubuntu ship an
+  unrelated package called `jwt` that would always win on version. It declares
+  a conflict with `jwt`. The rpm and apk packages keep the name `jwt` and
+  declare a conflict with Alpine's unrelated `jwt-cli`. The installed command
+  is `jwt` on every platform.
+
+### Added
+- Release workflow publishes the GitHub release, the Homebrew cask, and the
+  deb, rpm, and apk packages on Gemfury (`apt.fury.io/lazhari`,
+  `yum.fury.io/lazhari`, `alpine.fury.io/lazhari`).
+- README install sections for Homebrew, Go, apt, dnf, apk, and prebuilt
+  archives with checksum verification.
+
+### Fixed
+- Release runs are idempotent and serialized per tag.
+- CI test step runs under bash on every OS; lint findings fixed; actions
+  bumped to Node 24 majors.
+
 ## [2.0.0] - 2026-09-04
 
 ### Added
@@ -72,5 +93,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Clean table output using charmbracelet/lipgloss
 - MIT License
 
+[2.0.1]: https://github.com/lazhari/jwt/compare/v2.0.0...v2.0.1
 [2.0.0]: https://github.com/lazhari/jwt/compare/v1.0.0...v2.0.0
 [1.0.0]: https://github.com/lazhari/jwt/releases/tag/v1.0.0
